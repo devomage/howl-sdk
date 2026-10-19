@@ -39,6 +39,12 @@ namespace Focus.Howl.Editor
                 PrerequisiteId = "com.opsive.ultimatecharactercontroller",
                 PrerequisiteName = "Opsive Ultimate Character Controller 3.3+"
             },
+            new HowlModule
+            {
+                Id = "com.focus.howl.tools",
+                DisplayName = "Perf Tools",
+                Description = "Perf recorder and HUD (F10/F11): frame time, GC and Howl cost, CSV captures for baseline A/B runs."
+            },
         };
 
         public static PackageInfo Find(string id)

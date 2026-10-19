@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Unity.Profiling;
 using UnityEngine;
 
 namespace Focus.Howl
@@ -11,8 +10,8 @@ namespace Focus.Howl
     {
         public const int RecentCapacity = 256;
 
-        static readonly ProfilerMarker s_EmitMarker = new ProfilerMarker("Howl.Emit");
-        static readonly ProfilerMarker s_SetMarker = new ProfilerMarker("Howl.Set");
+        // No profiler markers in Emit/Set: a marker per call costs more than the call and, under Editor profiling,
+        // allocates. Measure around a caller's batch instead (see HowlPerfRecorder's "Howl.Calls").
 
         // Index 0 is reserved so default(EventId)/default(KeyId) are invalid and string index 0 is "".
         static readonly List<HowlEventDef> s_Events = new List<HowlEventDef> { null };
@@ -102,20 +101,17 @@ namespace Focus.Howl
         public static void Emit(EventId id, int a = 0, int b = 0, float x = 0f, float y = 0f, float z = 0f)
         {
             if (!Active || !id.IsValid) return;
-            using (s_EmitMarker.Auto())
-            {
-                ref var e = ref s_Recent[s_RecentNext];
-                e.Id = id.Value;
-                e.Time = Time.realtimeSinceStartupAsDouble;
-                e.A = a;
-                e.B = b;
-                e.X = x;
-                e.Y = y;
-                e.Z = z;
-                s_RecentNext = (s_RecentNext + 1) & (RecentCapacity - 1);
-                s_EventCounts[id.Value]++;
-                s_TotalEmitted++;
-            }
+            ref var e = ref s_Recent[s_RecentNext];
+            e.Id = id.Value;
+            e.Time = Time.realtimeSinceStartupAsDouble;
+            e.A = a;
+            e.B = b;
+            e.X = x;
+            e.Y = y;
+            e.Z = z;
+            s_RecentNext = (s_RecentNext + 1) & (RecentCapacity - 1);
+            s_EventCounts[id.Value]++;
+            s_TotalEmitted++;
         }
 
         public static void Emit(EventId id, int a, int b, Vector3 v) => Emit(id, a, b, v.x, v.y, v.z);
@@ -131,16 +127,13 @@ namespace Focus.Howl
         static void Write(KeyId key, HowlValueKind kind, int i, float x, float y, float z)
         {
             if (!Active || !key.IsValid) return;
-            using (s_SetMarker.Auto())
-            {
-                ref var v = ref s_Values[key.Value];
-                v.Kind = kind;
-                v.I = i;
-                v.X = x;
-                v.Y = y;
-                v.Z = z;
-                s_Versions[key.Value]++;
-            }
+            ref var v = ref s_Values[key.Value];
+            v.Kind = kind;
+            v.I = i;
+            v.X = x;
+            v.Y = y;
+            v.Z = z;
+            s_Versions[key.Value]++;
         }
 
         // ---- Inspection (editor/debug UI; may allocate) ----

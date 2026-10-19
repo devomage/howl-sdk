@@ -1,6 +1,6 @@
 {
   "name": "com.focus.howl.opsive",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "displayName": "Howl SDK - Opsive UCC Integration",
   "description": "Maps Opsive Ultimate Character Controller events to Howl events and info keys. Install through the Howl SDK Manager.",
   "unity": "6000.0",

@@ -1,0 +1,24 @@
+{
+    "name": "Howl.Tools",
+    "rootNamespace": "Focus.Howl.Tools",
+    "references": [
+        "Howl.Core",
+        "UnityEngine.UI",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.inputsystem",
+            "expression": "1.0.0",
+            "define": "HOWL_INPUT_SYSTEM"
+        }
+    ],
+    "noEngineReferences": false
+}

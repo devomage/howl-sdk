@@ -34,7 +34,6 @@ namespace Focus.Howl.Opsive
             s_Settings = HowlOpsiveSettings.Load();
             if (!s_Settings.AutoWire) return;
 
-            HowlOpsiveEvents.Register();
             SceneManager.sceneLoaded += OnSceneLoaded;
             WireAll();
 
@@ -78,6 +77,7 @@ namespace Focus.Howl.Opsive
         static bool WireCharacter(GameObject go)
         {
             if (HowlOpsiveRegistry.Contains(go)) return false;
+            HowlOpsiveEvents.Register();
             var entity = HowlOpsiveRegistry.Add(go, HowlEntityRole.Agent, "agent");
             go.AddComponent<HowlCharacterSource>().Init(entity, s_Settings, s_CameraTargets.Contains(go));
             return true;
@@ -86,6 +86,7 @@ namespace Focus.Howl.Opsive
         static bool WireObject(GameObject go)
         {
             if (HowlOpsiveRegistry.Contains(go) || go.GetComponent<UltimateCharacterLocomotion>() != null) return false;
+            HowlOpsiveEvents.Register();
             var entity = HowlOpsiveRegistry.Add(go, HowlEntityRole.Object, s_Settings.Categorize(go.name));
             go.AddComponent<HowlHealthSource>().Init(entity, s_Settings);
             return true;

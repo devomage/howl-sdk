@@ -19,5 +19,6 @@ The installer checks your setup, installs the core package and opens **Tools →
 | `com.focus.howl.installer` | Bootstrapper (Editor only) |
 | `com.focus.howl` | Emitter runtime + Howl SDK Manager |
 | `com.focus.howl.opsive` | Opsive Ultimate Character Controller 3.3+ integration |
+| `com.focus.howl.tools` | Perf recorder + HUD for baseline A/B runs (development) |
 
-All packages are versioned together and released as one tag (`v0.2.0`).
+All packages are versioned together and released as one tag (`v0.3.0`).
