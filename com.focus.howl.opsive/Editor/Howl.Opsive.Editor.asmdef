@@ -1,0 +1,27 @@
+{
+    "name": "Howl.Opsive.Editor",
+    "rootNamespace": "Focus.Howl.Opsive.Editor",
+    "references": [
+        "Howl.Core",
+        "Howl.Opsive"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "HOWL_OPSIVE"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.opsive.ultimatecharactercontroller",
+            "expression": "[3.3.0,4.0.0)",
+            "define": "HOWL_OPSIVE"
+        }
+    ],
+    "noEngineReferences": false
+}

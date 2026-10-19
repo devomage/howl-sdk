@@ -30,7 +30,7 @@ namespace Focus.Howl.Installer
         internal const string ShownKey = "Howl.Installer.Shown";
         const string RepoUrl = "https://github.com/devomage/howl-sdk.git";
         const string VersionsUrl = "https://raw.githubusercontent.com/devomage/howl-sdk/main/versions.json";
-        const string FallbackVersion = "0.1.1";
+        const string FallbackVersion = "0.2.0";
         const string CoreId = "com.focus.howl";
         const string InstallerId = "com.focus.howl.installer";
         const string UccId = "com.opsive.ultimatecharactercontroller";

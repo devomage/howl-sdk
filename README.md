@@ -20,4 +20,4 @@ The installer checks your setup, installs the core package and opens **Tools →
 | `com.focus.howl` | Emitter runtime + Howl SDK Manager |
 | `com.focus.howl.opsive` | Opsive Ultimate Character Controller 3.3+ integration |
 
-All packages are versioned together and released as one tag (`v0.1.1`).
+All packages are versioned together and released as one tag (`v0.2.0`).
