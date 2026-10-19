@@ -195,7 +195,9 @@ namespace Focus.Howl
 
             m_Ws?.Tick(now);
             m_File?.Tick(now);
-            bool listening = (m_Ws != null && m_Ws.IsListening) || (m_File != null && m_File.IsListening);
+            bool wsOpen = m_Ws != null && m_Ws.IsListening;
+            Howl.WebSocketOpen = wsOpen;
+            bool listening = wsOpen || (m_File != null && m_File.IsListening);
             Howl.SinkListening = listening;
 
             int pending = m_Ring.Count;

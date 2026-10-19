@@ -1,6 +1,6 @@
 {
   "name": "com.focus.howl.installer",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "displayName": "Howl SDK Installer",
   "description": "Bootstrapper for the Howl SDK. Installs the core package and hands off to the Howl SDK Manager, then removes itself.",
   "unity": "6000.0",

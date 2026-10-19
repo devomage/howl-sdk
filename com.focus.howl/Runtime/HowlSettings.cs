@@ -6,7 +6,8 @@ namespace Focus.Howl
 {
     /// <summary>
     /// Bridge settings. Loaded from Resources/HowlSettings when present, defaults otherwise.
-    /// Command-line overrides: -howl-ws &lt;url&gt;, -howl-no-ws, -howl-file, -howl-file-dir &lt;dir&gt;, -howl-tick &lt;ms&gt;, -howl-off.
+    /// Command-line overrides: -howl-ws &lt;url&gt;, -howl-no-ws, -howl-file, -howl-file-dir &lt;dir&gt;, -howl-tick &lt;ms&gt;, -howl-off,
+    /// -howl-launch / -howl-no-launch.
     /// </summary>
     [CreateAssetMenu(menuName = "Howl/Settings", fileName = "HowlSettings")]
     public sealed class HowlSettings : ScriptableObject
@@ -19,6 +20,11 @@ namespace Focus.Howl
         [Header("WebSocket sink (game is the client)")]
         public bool WebSocket = true;
         public string WebSocketUrl = "ws://127.0.0.1:7777";
+
+        [Header("App launch (howl://)")]
+        [Tooltip("If no app connects shortly after start, open the Howl app through the howl:// protocol. Skipped when the protocol isn't registered.")]
+        public bool LaunchApp = true;
+        [Range(0.5f, 10f)] public float LaunchDelay = 1.5f;
 
         [Header("File sink (JSONL)")]
         public bool FileLog;
@@ -59,6 +65,8 @@ namespace Focus.Howl
                     case "-howl-file-dir": if (next != null) { FileDirectory = next; i++; } break;
                     case "-howl-tick": if (next != null && int.TryParse(next, out int ms)) { TickMs = Mathf.Clamp(ms, 1, 50); i++; } break;
                     case "-howl-off": AutoStart = false; break;
+                    case "-howl-no-launch": LaunchApp = false; break;
+                    case "-howl-launch": LaunchApp = true; break;
                 }
             }
         }

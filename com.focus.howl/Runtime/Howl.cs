@@ -42,6 +42,7 @@ namespace Focus.Howl
         static volatile bool s_Live;
         static int s_Observers;
         static volatile bool s_SinkListening;
+        static volatile bool s_WebSocketOpen;
         static int s_Session;
 
         // Main-thread counters; the worker reads them for stats.
@@ -52,7 +53,10 @@ namespace Focus.Howl
         static long s_BaseUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         static bool s_WarnedLimit;
 
-        /// <summary>Master switch. Off: Emit and Set return after one bool check.</summary>
+        /// <summary>
+        /// Master switch for events. Off: Emit returns after one bool check. Info (Set) is always stored, so state
+        /// stays current while events are off and the next diff after turning back on is correct.
+        /// </summary>
         public static bool Active
         {
             get => s_Active;
@@ -77,6 +81,9 @@ namespace Focus.Howl
         public static long TotalEmitted => s_Emitted;
         public static long DroppedEvents => s_Dropped;
         public static HowlStats Stats => s_Worker?.Stats;
+        /// <summary>True while an app is connected over WebSocket.</summary>
+        public static bool AppConnected => s_WebSocketOpen;
+        internal static bool WebSocketOpen { set => s_WebSocketOpen = value; }
         internal static long BaseTicks => s_BaseTicks;
         internal static long BaseUnixMs => s_BaseUnixMs;
         internal static bool SinkListening
@@ -136,6 +143,7 @@ namespace Focus.Howl
             s_Ring = new HowlRing(settings.RingCapacity);
             s_Worker = new HowlWorker(settings, s_Ring);
             s_Worker.Start();
+            HowlAppLauncher.Schedule(settings);
 
             Application.quitting += Shutdown;
 #if UNITY_EDITOR
@@ -155,6 +163,7 @@ namespace Focus.Howl
 #endif
             var worker = s_Worker;
             s_Worker = null;
+            s_WebSocketOpen = false;
             UpdateLive();
             worker?.Stop();
         }
@@ -263,8 +272,8 @@ namespace Focus.Howl
 
         public static void Emit(EventId id, int a, int b, Vector3 v) => Emit(id, a, b, v.x, v.y, v.z);
 
-        // Info is kept current whenever Howl is active (even with nobody listening), so a sink that connects later
-        // gets the full state.
+        // Info is always kept current (even when inactive or with nobody listening): a sink that connects later, or
+        // Howl turning back on, gets the true state. A write is a compare plus a seqlock store, never I/O.
         public static void Set(KeyId key, float value) => Write(key, HowlValueKind.Float, 0, value, 0f, 0f);
         public static void Set(KeyId key, int value) => Write(key, HowlValueKind.Int, value, 0f, 0f, 0f);
         public static void Set(KeyId key, bool value) => Write(key, HowlValueKind.Bool, value ? 1 : 0, 0f, 0f, 0f);
@@ -275,7 +284,7 @@ namespace Focus.Howl
 
         static void Write(KeyId key, HowlValueKind kind, int i, float x, float y, float z)
         {
-            if (!s_Active || key.Value == 0) return;
+            if (key.Value == 0) return;
             int k = key.Value;
             ref var v = ref s_Values[k];
             // Unchanged writes cost a compare, not a version bump: setting the same value every frame is free.

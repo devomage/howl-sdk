@@ -11,8 +11,8 @@ namespace Focus.Howl
         public static EventId MatchStart, MatchEnd, Kill, Death, Respawn, Hit, DamageTaken, Heal, Pickup, SpellCast, LevelUp;
 
         public static KeyId PlayerName;
-        public static KeyId Map, Mode, MatchId, MatchState, TimeLeft;
-        public static KeyId MeHealth, MeMana, MeShield, MeAlive, MePos, MeYaw, MeLevel, MeKills, MeDeaths, MeItem;
+        public static KeyId Map, Mode, MatchId, MatchState, TimeLeft, MapSize;
+        public static KeyId MeHealth, MeMaxHealth, MeMana, MeMaxMana, MeShield, MeAlive, MePos, MeYaw, MeLevel, MeKills, MeDeaths, MeItem;
 
         /// <summary>String index used for unknown sources and empty values.</summary>
         public static int None;
@@ -53,9 +53,12 @@ namespace Focus.Howl
             MatchId = Howl.RegisterKey("match_info", "match_id", HowlValueKind.String);
             MatchState = Howl.RegisterKey("match_info", "state", HowlValueKind.String);
             TimeLeft = Howl.RegisterKey("match_info", "time_left", HowlValueKind.Float);
+            MapSize = Howl.RegisterKey("match_info", "map_size", HowlValueKind.Float);
 
             MeHealth = Howl.RegisterKey("me", "health", HowlValueKind.Float);
+            MeMaxHealth = Howl.RegisterKey("me", "max_health", HowlValueKind.Float);
             MeMana = Howl.RegisterKey("me", "mana", HowlValueKind.Float);
+            MeMaxMana = Howl.RegisterKey("me", "max_mana", HowlValueKind.Float);
             MeShield = Howl.RegisterKey("me", "shield", HowlValueKind.Float);
             MeAlive = Howl.RegisterKey("me", "alive", HowlValueKind.Bool);
             MePos = Howl.RegisterKey("me", "pos", HowlValueKind.Vector3);

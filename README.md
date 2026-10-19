@@ -21,7 +21,7 @@ The installer checks your setup, installs the core package and opens **Tools →
 | `com.focus.howl.opsive` | Opsive Ultimate Character Controller 3.3+ integration |
 | `com.focus.howl.tools` | Perf recorder + HUD for baseline A/B runs (development) |
 
-All packages are versioned together and released as one tag (`v0.4.1`).
+All packages are versioned together and released as one tag (`v0.5.0`).
 
 ## How it works
 
@@ -32,7 +32,9 @@ The game calls `Howl.Emit(...)` / `Howl.Set(...)`: a struct write into a lock-fr
 
 With nothing listening, `Emit` returns after one bool check.
 
-Settings: `Resources/HowlSettings` (Create → Howl → Settings), or command line `-howl-ws <url>`, `-howl-no-ws`, `-howl-file`, `-howl-file-dir <dir>`, `-howl-tick <ms>`, `-howl-off`.
+Settings: `Resources/HowlSettings` (Create → Howl → Settings), or command line `-howl-ws <url>`, `-howl-no-ws`, `-howl-file`, `-howl-file-dir <dir>`, `-howl-tick <ms>`, `-howl-off`, `-howl-launch` / `-howl-no-launch`.
+
+If no app connects within ~1.5 s, the game opens the app via `howl://launch?ws=…` (only when the protocol is registered, so machines without the app see nothing).
 
 ## Dev sink
 

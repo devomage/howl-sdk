@@ -118,6 +118,7 @@ namespace Focus.Howl.Opsive
             if (IsPlayer)
             {
                 Howl.Set(HowlOpsiveEvents.MeHealth, m_Health.HealthValue);
+                Howl.Set(HowlStandard.MeMaxHealth, m_Health.HealthAttribute != null ? m_Health.HealthAttribute.MaxValue : 0f);
                 Howl.Set(HowlOpsiveEvents.MeShield, m_Health.ShieldValue);
                 Howl.Set(HowlOpsiveEvents.MeAlive, alive);
             }
