@@ -1,0 +1,9 @@
+{
+  "name": "howl-ws-sink",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dev WebSocket sink for the Howl SDK: stands in for the overlay app and measures throughput, latency and drops.",
+  "main": "sink.js",
+  "scripts": { "start": "node sink.js" },
+  "dependencies": { "ws": "^8.18.0" }
+}

@@ -22,11 +22,12 @@ namespace Focus.Howl
 
     public enum HowlValueKind : byte { None, Float, Int, Bool, String, Vector3 }
 
-    /// <summary>Fixed-size event record. String fields hold string table indices.</summary>
+    /// <summary>Fixed-size event record (40 bytes). String fields hold string table indices.</summary>
     public struct HowlEvent
     {
         public ushort Id;
-        public double Time;
+        /// <summary>Stopwatch timestamp taken in Emit. See <see cref="Howl.TicksToSeconds"/>.</summary>
+        public long Ticks;
         public int A, B;
         public float X, Y, Z;
     }
@@ -54,5 +55,23 @@ namespace Focus.Howl
         public string Category;
         public string Key;
         public HowlValueKind Kind;
+        public int CategoryIndex;
+    }
+
+    /// <summary>Bridge telemetry, published by the worker once per second (also sent as bridge.* info).</summary>
+    public sealed class HowlStats
+    {
+        public float EventsPerSecond;
+        public float BytesPerSecond;
+        public float BatchesPerSecond;
+        public long Emitted;
+        public long DroppedEvents;
+        public long DroppedBatches;
+        public int RingHighWater;
+        public int RingCapacity;
+        public float SerializeUsAvg;
+        public float SendUsAvg;
+        public string WebSocket = "off";
+        public string File = "off";
     }
 }

@@ -1,61 +1,193 @@
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 namespace Focus.Howl
 {
-    // Phase 0 stub: a main-thread store so the event vocabulary and integrations can be built and watched now.
-    // Phase 2 replaces the internals with the SPSC ring, versioned/seqlock info slots and the worker thread.
-    // The public API (Register*/Emit/Set) is the one the real emitter keeps.
+    /// <summary>
+    /// The game-facing API. Emit and Set are the only calls the game pays for: a struct write into a preallocated
+    /// ring, or a seqlock-guarded write into an info slot. Diffing, JSON and all I/O happen on the Howl worker thread.
+    ///
+    /// Threading: Register*, Emit and Set must be called from the main thread (single producer).
+    /// No profiler markers per call: wrap a frame's batch of calls in a marker instead (see Howl.Calls in Tools).
+    /// </summary>
     public static partial class Howl
     {
+        public const int MaxKeys = 2048;
+        public const int MaxEvents = 1024;
         public const int RecentCapacity = 256;
 
-        // No profiler markers in Emit/Set: a marker per call costs more than the call and, under Editor profiling,
-        // allocates. Measure around a caller's batch instead (see HowlPerfRecorder's "Howl.Calls").
-
-        // Index 0 is reserved so default(EventId)/default(KeyId) are invalid and string index 0 is "".
-        static readonly List<HowlEventDef> s_Events = new List<HowlEventDef> { null };
+        // Registration tables: main thread writes, worker reads.
+        static readonly HowlAppendList<HowlEventDef> s_Events = new HowlAppendList<HowlEventDef>();
         static readonly Dictionary<string, ushort> s_EventsByName = new Dictionary<string, ushort>();
-        static readonly List<HowlKeyDef> s_Keys = new List<HowlKeyDef> { null };
+        static readonly HowlAppendList<HowlKeyDef> s_Keys = new HowlAppendList<HowlKeyDef>();
         static readonly Dictionary<string, ushort> s_KeysByPath = new Dictionary<string, ushort>();
-        static readonly List<string> s_Strings = new List<string> { "" };
-        static readonly Dictionary<string, int> s_StringIndex = new Dictionary<string, int> { { "", 0 } };
+        static readonly HowlAppendList<string> s_Categories = new HowlAppendList<string>();
+        static readonly Dictionary<string, int> s_CategoryIndex = new Dictionary<string, int>();
+        static readonly HowlAppendList<string> s_Strings = new HowlAppendList<string>();
+        static readonly Dictionary<string, int> s_StringIndex = new Dictionary<string, int>();
 
-        static HowlValue[] s_Values = new HowlValue[64];
-        static uint[] s_Versions = new uint[64];
-        static long[] s_EventCounts = new long[64];
-        static readonly HowlEvent[] s_Recent = new HowlEvent[RecentCapacity];
-        static int s_RecentNext;
-        static long s_TotalEmitted;
+        // Info slots. Seq is even when stable and odd while being written (seqlock); version = seq / 2.
+        static readonly HowlValue[] s_Values = new HowlValue[MaxKeys];
+        static readonly int[] s_Seq = new int[MaxKeys];
 
-        /// <summary>When false, Emit and Set return after one bool check.</summary>
-        public static bool Active = true;
+        static HowlRing s_Ring;
+        static HowlWorker s_Worker;
+
+        static bool s_Active = true;
+        // Active and someone is listening. Emit checks this one field; when false (dormant) it returns immediately.
+        static volatile bool s_Live;
+        static int s_Observers;
+        static volatile bool s_SinkListening;
+        static int s_Session;
+
+        // Main-thread counters; the worker reads them for stats.
+        static long s_Emitted;
+        static long s_Dropped;
+
+        static long s_BaseTicks = Stopwatch.GetTimestamp();
+        static long s_BaseUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        static bool s_WarnedLimit;
+
+        /// <summary>Master switch. Off: Emit and Set return after one bool check.</summary>
+        public static bool Active
+        {
+            get => s_Active;
+            set
+            {
+                s_Active = value;
+                UpdateLive();
+            }
+        }
+
+        /// <summary>True when events are being collected (active and observed by a sink or an in-process observer).</summary>
+        public static bool IsLive => s_Live;
+        public static bool IsRunning => s_Worker != null;
+        /// <summary>Incremented on every reset (each Play session), so observers can re-register.</summary>
+        public static int Session => s_Session;
 
         public static IReadOnlyList<HowlEventDef> Events => s_Events;
         public static IReadOnlyList<HowlKeyDef> Keys => s_Keys;
         public static IReadOnlyList<string> Strings => s_Strings;
-        public static long TotalEmitted => s_TotalEmitted;
+        public static IReadOnlyList<string> Categories => s_Categories;
 
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-        public static void Reset()
+        public static long TotalEmitted => s_Emitted;
+        public static long DroppedEvents => s_Dropped;
+        public static HowlStats Stats => s_Worker?.Stats;
+        internal static long BaseTicks => s_BaseTicks;
+        internal static long BaseUnixMs => s_BaseUnixMs;
+        internal static bool SinkListening
         {
-            s_Events.RemoveRange(1, s_Events.Count - 1);
-            s_EventsByName.Clear();
-            s_Keys.RemoveRange(1, s_Keys.Count - 1);
-            s_KeysByPath.Clear();
-            s_Strings.RemoveRange(1, s_Strings.Count - 1);
-            s_StringIndex.Clear();
-            s_StringIndex.Add("", 0);
-            System.Array.Clear(s_Values, 0, s_Values.Length);
-            System.Array.Clear(s_Versions, 0, s_Versions.Length);
-            System.Array.Clear(s_EventCounts, 0, s_EventCounts.Length);
-            System.Array.Clear(s_Recent, 0, s_Recent.Length);
-            s_RecentNext = 0;
-            s_TotalEmitted = 0;
-            Active = true;
+            set
+            {
+                if (s_SinkListening == value) return;
+                s_SinkListening = value;
+                UpdateLive();
+            }
         }
 
-        // ---- Registration (startup only; allocates) ----
+        public static double TicksToSeconds(long ticks) => (ticks - s_BaseTicks) / (double)Stopwatch.Frequency;
+
+        // ---- Lifetime ----
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics() => Reset();
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        static void AutoStart()
+        {
+            var settings = HowlSettings.Load();
+            if (settings.AutoStart) Start(settings);
+        }
+
+        /// <summary>Stops the worker and clears every registration and value.</summary>
+        public static void Reset()
+        {
+            Shutdown();
+            s_Events.Reset();
+            s_EventsByName.Clear();
+            s_Keys.Reset();
+            s_KeysByPath.Clear();
+            s_Categories.Reset();
+            s_CategoryIndex.Clear();
+            s_Strings.Reset();
+            s_StringIndex.Clear();
+            Array.Clear(s_Values, 0, s_Values.Length);
+            Array.Clear(s_Seq, 0, s_Seq.Length);
+            s_Emitted = 0;
+            s_Dropped = 0;
+            s_Observers = 0;
+            s_SinkListening = false;
+            s_Active = true;
+            s_WarnedLimit = false;
+            s_Session++;
+            UpdateLive();
+        }
+
+        /// <summary>Starts the worker thread and sinks. Called automatically before the first scene loads.</summary>
+        public static void Start(HowlSettings settings)
+        {
+            if (s_Worker != null) return;
+            s_BaseTicks = Stopwatch.GetTimestamp();
+            s_BaseUnixMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            s_Ring = new HowlRing(settings.RingCapacity);
+            s_Worker = new HowlWorker(settings, s_Ring);
+            s_Worker.Start();
+
+            Application.quitting += Shutdown;
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.playModeStateChanged += OnPlayModeChanged;
+            UnityEditor.AssemblyReloadEvents.beforeAssemblyReload += Shutdown;
+#endif
+            UpdateLive();
+        }
+
+        /// <summary>Drains what's queued, flushes sinks and stops the worker. Safe to call repeatedly.</summary>
+        public static void Shutdown()
+        {
+            Application.quitting -= Shutdown;
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.playModeStateChanged -= OnPlayModeChanged;
+            UnityEditor.AssemblyReloadEvents.beforeAssemblyReload -= Shutdown;
+#endif
+            var worker = s_Worker;
+            s_Worker = null;
+            UpdateLive();
+            worker?.Stop();
+        }
+
+#if UNITY_EDITOR
+        static void OnPlayModeChanged(UnityEditor.PlayModeStateChange change)
+        {
+            if (change == UnityEditor.PlayModeStateChange.ExitingPlayMode) Shutdown();
+        }
+#endif
+
+        static void UpdateLive() => s_Live = s_Active && s_Worker != null && (s_Observers > 0 || s_SinkListening);
+
+        /// <summary>An in-process consumer (e.g. a debug window) wants events even when no sink is connected.</summary>
+        public static void AddObserver()
+        {
+            s_Observers++;
+            UpdateLive();
+        }
+
+        public static void RemoveObserver()
+        {
+            if (s_Observers > 0) s_Observers--;
+            UpdateLive();
+        }
+
+        /// <summary>Wakes the worker to send now instead of at its next tick (e.g. on match end).</summary>
+        public static void Flush() => s_Worker?.Wake();
+
+        /// <summary>Turns the JSONL file sink on or off at runtime.</summary>
+        public static void SetFileSink(bool enabled) => s_Worker?.RequestFile(enabled);
+
+        // ---- Registration (main thread; allocates; call at startup or rarely) ----
 
         public static EventId RegisterEvent(string name,
             string aName = null, HowlField aKind = HowlField.None,
@@ -63,10 +195,9 @@ namespace Focus.Howl
             string xName = null, HowlVectorField xKind = HowlVectorField.None)
         {
             if (s_EventsByName.TryGetValue(name, out var existing)) return new EventId(existing);
-            var id = (ushort)s_Events.Count;
-            s_Events.Add(new HowlEventDef { Name = name, AName = aName, AKind = aKind, BName = bName, BKind = bKind, XName = xName, XKind = xKind });
+            if (s_Events.Count >= MaxEvents) return Limit("events", MaxEvents, new EventId(0));
+            var id = (ushort)s_Events.Add(new HowlEventDef { Name = name, AName = aName, AKind = aKind, BName = bName, BKind = bKind, XName = xName, XKind = xKind });
             s_EventsByName.Add(name, id);
-            if (id >= s_EventCounts.Length) System.Array.Resize(ref s_EventCounts, s_EventCounts.Length * 2);
             return new EventId(id);
         }
 
@@ -74,14 +205,14 @@ namespace Focus.Howl
         {
             string path = category + "." + key;
             if (s_KeysByPath.TryGetValue(path, out var existing)) return new KeyId(existing);
-            var id = (ushort)s_Keys.Count;
-            s_Keys.Add(new HowlKeyDef { Category = category, Key = key, Kind = kind });
-            s_KeysByPath.Add(path, id);
-            if (id >= s_Values.Length)
+            if (s_Keys.Count >= MaxKeys) return Limit("info keys", MaxKeys, new KeyId(0));
+            if (!s_CategoryIndex.TryGetValue(category, out int categoryIndex))
             {
-                System.Array.Resize(ref s_Values, s_Values.Length * 2);
-                System.Array.Resize(ref s_Versions, s_Versions.Length * 2);
+                categoryIndex = s_Categories.Add(category);
+                s_CategoryIndex.Add(category, categoryIndex);
             }
+            var id = (ushort)s_Keys.Add(new HowlKeyDef { Category = category, Key = key, Kind = kind, CategoryIndex = categoryIndex });
+            s_KeysByPath.Add(path, id);
             return new KeyId(id);
         }
 
@@ -90,32 +221,50 @@ namespace Focus.Howl
         {
             if (string.IsNullOrEmpty(value)) return 0;
             if (s_StringIndex.TryGetValue(value, out var index)) return index;
-            index = s_Strings.Count;
-            s_Strings.Add(value);
+            index = s_Strings.Add(value);
             s_StringIndex.Add(value, index);
             return index;
         }
 
-        // ---- Hot path (no allocation) ----
+        static T Limit<T>(string what, int max, T invalid)
+        {
+            if (!s_WarnedLimit) Debug.LogWarning($"[Howl] More than {max} {what} registered; extra registrations are ignored.");
+            s_WarnedLimit = true;
+            return invalid;
+        }
+
+        // ---- Hot path (main thread; no allocation, no locks, no I/O) ----
 
         public static void Emit(EventId id, int a = 0, int b = 0, float x = 0f, float y = 0f, float z = 0f)
         {
-            if (!Active || !id.IsValid) return;
-            ref var e = ref s_Recent[s_RecentNext];
+            if (!s_Live || id.Value == 0) return;
+            var ring = s_Ring;
+            long head = ring.Head;
+            if (head - ring.CachedTail >= ring.Capacity)
+            {
+                ring.CachedTail = Volatile.Read(ref ring.Tail);
+                if (head - ring.CachedTail >= ring.Capacity)
+                {
+                    s_Dropped++;
+                    return;
+                }
+            }
+            ref var e = ref ring.Buffer[head & ring.Mask];
             e.Id = id.Value;
-            e.Time = Time.realtimeSinceStartupAsDouble;
+            e.Ticks = Stopwatch.GetTimestamp();
             e.A = a;
             e.B = b;
             e.X = x;
             e.Y = y;
             e.Z = z;
-            s_RecentNext = (s_RecentNext + 1) & (RecentCapacity - 1);
-            s_EventCounts[id.Value]++;
-            s_TotalEmitted++;
+            Volatile.Write(ref ring.Head, head + 1);
+            s_Emitted++;
         }
 
         public static void Emit(EventId id, int a, int b, Vector3 v) => Emit(id, a, b, v.x, v.y, v.z);
 
+        // Info is kept current whenever Howl is active (even with nobody listening), so a sink that connects later
+        // gets the full state.
         public static void Set(KeyId key, float value) => Write(key, HowlValueKind.Float, 0, value, 0f, 0f);
         public static void Set(KeyId key, int value) => Write(key, HowlValueKind.Int, value, 0f, 0f, 0f);
         public static void Set(KeyId key, bool value) => Write(key, HowlValueKind.Bool, value ? 1 : 0, 0f, 0f, 0f);
@@ -126,41 +275,64 @@ namespace Focus.Howl
 
         static void Write(KeyId key, HowlValueKind kind, int i, float x, float y, float z)
         {
-            if (!Active || !key.IsValid) return;
-            ref var v = ref s_Values[key.Value];
+            if (!s_Active || key.Value == 0) return;
+            int k = key.Value;
+            ref var v = ref s_Values[k];
+            // Unchanged writes cost a compare, not a version bump: setting the same value every frame is free.
+            if (v.Kind == kind && v.I == i && v.X == x && v.Y == y && v.Z == z) return;
+            int seq = Interlocked.Increment(ref s_Seq[k]); // odd: write in progress (full fence)
             v.Kind = kind;
             v.I = i;
             v.X = x;
             v.Y = y;
             v.Z = z;
-            s_Versions[key.Value]++;
+            Volatile.Write(ref s_Seq[k], seq + 1);        // even: stable
         }
 
-        // ---- Inspection (editor/debug UI; may allocate) ----
-
-        /// <summary>Clears recent events and counts. Registrations and info values are kept.</summary>
-        public static void ClearHistory()
+        /// <summary>Consistent read of an info slot from any thread. False if a write kept racing it.</summary>
+        internal static bool TryReadSlot(int key, out HowlValue value, out int seq)
         {
-            System.Array.Clear(s_EventCounts, 0, s_EventCounts.Length);
-            System.Array.Clear(s_Recent, 0, s_Recent.Length);
-            s_RecentNext = 0;
-            s_TotalEmitted = 0;
+            for (int attempt = 0; attempt < 64; attempt++)
+            {
+                int s1 = Volatile.Read(ref s_Seq[key]);
+                if ((s1 & 1) != 0)
+                {
+                    Thread.SpinWait(4);
+                    continue;
+                }
+                value = s_Values[key];
+                Interlocked.MemoryBarrier();
+                if (Volatile.Read(ref s_Seq[key]) == s1)
+                {
+                    seq = s1;
+                    return true;
+                }
+            }
+            value = default;
+            seq = 0;
+            return false;
         }
 
-        public static long GetEventCount(ushort id) => id < s_EventCounts.Length ? s_EventCounts[id] : 0;
-        public static HowlValue GetValue(ushort key) => s_Values[key];
-        public static uint GetVersion(ushort key) => s_Versions[key];
+        // ---- Inspection (debug UI; may allocate) ----
+
+        public static long GetEventCount(ushort id) => s_Worker?.GetEventCount(id) ?? 0;
+        public static long HistoryTotal => s_Worker?.HistoryTotal ?? 0;
+
+        public static HowlValue GetValue(ushort key)
+        {
+            TryReadSlot(key, out var value, out _);
+            return value;
+        }
+
+        public static uint GetVersion(ushort key) => (uint)(Volatile.Read(ref s_Seq[key]) >> 1);
+
         public static string GetString(int index) => index >= 0 && index < s_Strings.Count ? s_Strings[index] : "?";
 
-        /// <summary>Copies up to <paramref name="buffer"/>.Length most recent events, newest first. Returns the count.</summary>
-        public static int CopyRecent(HowlEvent[] buffer)
-        {
-            int available = (int)System.Math.Min(s_TotalEmitted, RecentCapacity);
-            int count = System.Math.Min(available, buffer.Length);
-            for (int i = 0; i < count; i++)
-                buffer[i] = s_Recent[(s_RecentNext - 1 - i) & (RecentCapacity - 1)];
-            return count;
-        }
+        /// <summary>Copies up to buffer.Length most recent events seen by the worker, newest first.</summary>
+        public static int CopyRecent(HowlEvent[] buffer) => s_Worker?.CopyRecent(buffer) ?? 0;
+
+        /// <summary>Clears the worker's recent-event history and per-event counts.</summary>
+        public static void ClearHistory() => s_Worker?.RequestClearHistory();
 
         public static string FormatEvent(in HowlEvent e)
         {

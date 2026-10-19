@@ -312,7 +312,13 @@ namespace Focus.Howl.Tools
             m_Sb.Append(string.Format(inv, "frame  avg {0:0.00} ms   max {1:0.00} ms   ({2:0} fps)\n", frameAvg, frameMax, 1000f / Mathf.Max(0.001f, frameAvg)));
             m_Sb.Append(string.Format(inv, "main thread  avg {0:0.00} ms\n", mainSum / n));
             m_Sb.Append(string.Format(inv, "GC  {0:0} B/frame avg\n", gcSum / n));
-            m_Sb.Append(string.Format(inv, "Howl  avg {0:0.0} us   max {1:0.0} us   events {2}{3}\n", howlSum / n, howlMax, Howl.TotalEmitted, Howl.Active ? "" : "   (inactive)"));
+            m_Sb.Append(string.Format(inv, "Howl  avg {0:0.0} us   max {1:0.0} us   events {2}{3}\n", howlSum / n, howlMax, Howl.TotalEmitted,
+                !Howl.Active ? "   (inactive)" : Howl.IsLive ? "" : "   (dormant: no listener)"));
+            var stats = Howl.Stats;
+            if (stats != null)
+                m_Sb.Append(string.Format(inv, "bridge  ws {0}  file {1}  {2:0} ev/s  {3:0} KB/s  ser {4:0} us  send {5:0} us  ring {6}/{7}  dropped {8}/{9}b\n",
+                    stats.WebSocket, stats.File, stats.EventsPerSecond, stats.BytesPerSecond / 1024f, stats.SerializeUsAvg, stats.SendUsAvg,
+                    stats.RingHighWater, stats.RingCapacity, stats.DroppedEvents, stats.DroppedBatches));
             if (m_Recording)
             {
                 double elapsed = m_Skip > 0 ? 0 : Time.realtimeSinceStartupAsDouble - m_StartTime;

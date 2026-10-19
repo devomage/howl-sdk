@@ -21,4 +21,24 @@ The installer checks your setup, installs the core package and opens **Tools →
 | `com.focus.howl.opsive` | Opsive Ultimate Character Controller 3.3+ integration |
 | `com.focus.howl.tools` | Perf recorder + HUD for baseline A/B runs (development) |
 
-All packages are versioned together and released as one tag (`v0.3.0`).
+All packages are versioned together and released as one tag (`v0.4.0`).
+
+## How it works
+
+The game calls `Howl.Emit(...)` / `Howl.Set(...)`: a struct write into a lock-free ring or a seqlock-guarded info slot, with no allocation, locks or I/O on the main thread. A background worker drains it every ~8 ms, diffs info, and sends GEP-shaped NDJSON batches to:
+
+- **WebSocket** (game is the client, default `ws://127.0.0.1:7777`): the overlay app's server.
+- **JSONL file** (optional): replay, debugging, forensics.
+
+With nothing listening, `Emit` returns after one bool check.
+
+Settings: `Resources/HowlSettings` (Create → Howl → Settings), or command line `-howl-ws <url>`, `-howl-no-ws`, `-howl-file`, `-howl-file-dir <dir>`, `-howl-tick <ms>`, `-howl-off`.
+
+## Dev sink
+
+`tools/ws-sink` stands in for the overlay app and reports throughput, end-to-end latency and sequence gaps:
+
+```
+cd tools/ws-sink && npm install
+node sink.js --out summary.json
+```

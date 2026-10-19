@@ -22,6 +22,7 @@ namespace Focus.Howl.Editor
         string m_Filter = "";
         string m_Text = "";
         GUIStyle m_TextStyle;
+        int m_ObservedSession = -1;
 
         static readonly string[] Tabs = { "Events", "Counts", "Info" };
 
@@ -30,8 +31,20 @@ namespace Focus.Howl.Editor
 
         void OnEnable() => Refresh();
 
+        // While open, the window counts as an observer so events flow even with no sink connected.
+        void OnDisable()
+        {
+            if (m_ObservedSession == Howl.Session) Howl.RemoveObserver();
+            m_ObservedSession = -1;
+        }
+
         void Update()
         {
+            if (EditorApplication.isPlaying && m_ObservedSession != Howl.Session && Howl.IsRunning)
+            {
+                Howl.AddObserver();
+                m_ObservedSession = Howl.Session;
+            }
             if (!EditorApplication.isPlaying || EditorApplication.timeSinceStartup < m_NextRefresh) return;
             Refresh();
             Repaint();
@@ -60,7 +73,7 @@ namespace Focus.Howl.Editor
                 if (GUILayout.Button(new GUIContent("Copy All", "Copy all tabs (filtered) to the clipboard"), EditorStyles.toolbarButton)) Copy(BuildAll());
                 GUILayout.FlexibleSpace();
                 string filter = EditorGUILayout.TextField(m_Filter, EditorStyles.toolbarSearchField, GUILayout.Width(180));
-                GUILayout.Label("Total: " + Howl.TotalEmitted, EditorStyles.miniLabel);
+                GUILayout.Label("Total: " + Howl.HistoryTotal, EditorStyles.miniLabel);
                 Howl.Active = GUILayout.Toggle(Howl.Active, "Active", EditorStyles.toolbarButton);
 
                 if (tab != m_Tab || filter != m_Filter)
@@ -95,7 +108,7 @@ namespace Focus.Howl.Editor
                     {
                         string line = Howl.FormatEvent(m_Recent[i]);
                         if (!Matches(line)) continue;
-                        sb.Append(m_Recent[i].Time.ToString("0.000")).Append('\t').AppendLine(line);
+                        sb.Append(Howl.TicksToSeconds(m_Recent[i].Ticks).ToString("0.000")).Append('\t').AppendLine(line);
                         rows++;
                     }
                     break;

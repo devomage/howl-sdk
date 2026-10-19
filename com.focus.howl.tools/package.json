@@ -1,6 +1,6 @@
 {
   "name": "com.focus.howl.tools",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "displayName": "Howl SDK - Perf Tools",
   "description": "Perf recorder and HUD for measuring the emitter against a baseline: frame time, main thread, GC per frame, Howl call cost. CSV captures plus a run summary. Development use; not needed in shipping builds.",
   "unity": "6000.0",
