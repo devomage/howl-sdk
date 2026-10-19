@@ -15,8 +15,9 @@ namespace Focus.Howl.Editor
 
         readonly Dictionary<string, bool> desired = new Dictionary<string, bool>();
         string latestVersion;
-        UnityWebRequest versionRequest;
-        AddAndRemoveRequest request;
+        [NonSerialized] UnityWebRequest versionRequest;
+        // Not serialized: a request restored after domain reload is an empty shell that reports Failure with no Error.
+        [NonSerialized] AddAndRemoveRequest request;
         string error;
         Vector2 scroll;
 
@@ -79,7 +80,7 @@ namespace Focus.Howl.Editor
 
             if (request != null && request.IsCompleted)
             {
-                if (request.Status == StatusCode.Failure) error = request.Error.message;
+                if (request.Status == StatusCode.Failure) error = request.Error?.message ?? "Package Manager request failed.";
                 request = null;
                 RefreshDesired();
                 Repaint();

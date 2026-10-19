@@ -1,6 +1,6 @@
 {
   "name": "com.focus.howl",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "displayName": "Howl SDK",
   "description": "Zero-cost gameplay event emitter for Overwolf overlays. Includes the Howl SDK Manager for installing integrations and updates.",
   "unity": "6000.0",

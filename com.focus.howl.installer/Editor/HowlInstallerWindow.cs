@@ -30,7 +30,7 @@ namespace Focus.Howl.Installer
         internal const string ShownKey = "Howl.Installer.Shown";
         const string RepoUrl = "https://github.com/devomage/howl-sdk.git";
         const string VersionsUrl = "https://raw.githubusercontent.com/devomage/howl-sdk/main/versions.json";
-        const string FallbackVersion = "0.1.0";
+        const string FallbackVersion = "0.1.1";
         const string CoreId = "com.focus.howl";
         const string InstallerId = "com.focus.howl.installer";
         const string UccId = "com.opsive.ultimatecharactercontroller";
@@ -42,8 +42,9 @@ namespace Focus.Howl.Installer
         bool uccPresent;
         string latestVersion;
         bool versionChecked;
-        UnityWebRequest versionRequest;
-        AddAndRemoveRequest installRequest;
+        [NonSerialized] UnityWebRequest versionRequest;
+        // Not serialized: a request restored after domain reload is an empty shell that reports Failure with no Error.
+        [NonSerialized] AddAndRemoveRequest installRequest;
         string error;
 
         [MenuItem("Tools/Howl/Installer")]
@@ -96,7 +97,7 @@ namespace Focus.Howl.Installer
 
             if (installRequest != null && installRequest.IsCompleted)
             {
-                if (installRequest.Status == StatusCode.Failure) error = installRequest.Error.message;
+                if (installRequest.Status == StatusCode.Failure) error = installRequest.Error?.message ?? "Package Manager request failed.";
                 installRequest = null;
                 Repaint();
             }
