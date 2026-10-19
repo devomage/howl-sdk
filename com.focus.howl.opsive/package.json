@@ -1,0 +1,11 @@
+{
+  "name": "com.focus.howl.opsive",
+  "version": "0.1.0",
+  "displayName": "Howl SDK - Opsive UCC Integration",
+  "description": "Maps Opsive Ultimate Character Controller events to Howl events and info keys. Install through the Howl SDK Manager.",
+  "unity": "6000.0",
+  "author": {
+    "name": "Focus",
+    "url": "https://github.com/devomage/howl-sdk"
+  }
+}

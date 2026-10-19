@@ -1,0 +1,18 @@
+{
+    "name": "Howl.Editor",
+    "rootNamespace": "Focus.Howl.Editor",
+    "references": [
+        "Howl.Core"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

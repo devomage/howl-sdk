@@ -1,0 +1,26 @@
+{
+    "name": "Howl.Opsive",
+    "rootNamespace": "Focus.Howl.Opsive",
+    "references": [
+        "Howl.Core",
+        "Opsive.Shared.Runtime",
+        "Opsive.UltimateCharacterController"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "HOWL_OPSIVE"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.opsive.ultimatecharactercontroller",
+            "expression": "[3.3.0,4.0.0)",
+            "define": "HOWL_OPSIVE"
+        }
+    ],
+    "noEngineReferences": false
+}
